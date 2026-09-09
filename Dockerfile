@@ -7,36 +7,18 @@ RUN apt-get update && apt-get install -y nginx iproute2 && rm -rf /var/lib/apt/l
     && rm -f /etc/nginx/sites-enabled/default \
     && rm -f /etc/nginx/sites-available/default
 
-# Copy requirements first for better caching
+# 只安装依赖，不复制项目代码/资源（项目代码在 docker run 时通过 -v 挂载）
 COPY backend/requirements.txt .
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install -r requirements.txt
 
-# Copy backend files
-COPY config.py .
-COPY backend/app.py .
-COPY backend/setting.py .
-COPY backend/summary.py .
-COPY backend/backend_utils.py .
-COPY backend/healthcheck.py .
-COPY core/ ./core/
-COPY llm_api/ ./llm_api/
-COPY prompts/ ./prompts/
-COPY custom/ ./custom/
-
-# Copy frontend files
-COPY frontend/index.html /usr/share/nginx/html/
-COPY frontend/js/ /usr/share/nginx/html/js/
-COPY frontend/styles/ /usr/share/nginx/html/styles/
-COPY frontend/data/ /usr/share/nginx/html/data/
-
-# Copy nginx configuration
+# 复制 nginx 配置模板（start.sh 会根据环境变量调整端口/后端地址）
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy start script
+# 复制启动脚本（通常会被挂载到 /app 的 start.sh 覆盖，仅作兜底）
 COPY start.sh .
 RUN chmod +x start.sh
 
 # EXPOSE $FRONTEND_PORT
 
-CMD ["./start.sh"] 
+CMD ["bash", "./start.sh"] 
