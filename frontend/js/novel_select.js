@@ -186,9 +186,10 @@ async function handleFileSelect(event) {
         let content;
         try {
             content = e.target.result;
-            // Check if content is garbled (contains lots of  characters)
-            if (content.split('').length > content.length * 0.1) {
-                // If garbled, try reading again with GBK encoding
+            // 检测乱码：统计替换字符 U+FFFD 的比例（用 UTF-8 解码 GBK 文件时会产生大量 U+FFFD 替换字符）
+            const replacementCount = (content.match(/\uFFFD/g) || []).length;
+            if (content.length > 0 && replacementCount / content.length > 0.1) {
+                // 若乱码，则用 GBK 重新解码
                 const response = await fetch(URL.createObjectURL(file));
                 const buffer = await response.arrayBuffer();
                 const decoder = new TextDecoder('gbk');
