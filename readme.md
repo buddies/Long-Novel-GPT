@@ -90,6 +90,60 @@ docker run -p 80:80 --env-file .env -d maoxiaoyuz/long-novel-gpt:latest
   <img src="assets/LNGPT-V2.0.png" alt="Gradio DEMO有5个Tab页面" width="600"/>
 </p>
 
+### 本地源码开发运行（代码/资源热更新，无需重复构建）
+
+如果你本机有本项目源码，并且希望修改代码或资源后**不用每次重新 `docker build`**，可以采用源码挂载的方式运行：镜像只负责安装运行环境（Python 依赖、nginx），项目代码与资源会在 `docker run` 时通过 `-v` 挂载进容器。
+
+**1. 先构建一次镜像**（在项目根目录执行）
+```bash
+docker build --network host -t maoxiaoyuz/long-novel-gpt .
+```
+
+**2. 在项目根目录挂载源码并启动容器**
+```bash
+docker run -p 80:80 \
+    --env-file .env \
+    -v "$(pwd)":/app \
+    -v "$(pwd)/frontend":/usr/share/nginx/html \
+    --add-host=host.docker.internal:host-gateway \
+    -d maoxiaoyuz/long-novel-gpt:latest
+```
+
+也可以直接运行仓库内置脚本（会自动执行上面的构建 + 启动，且不受当前所在目录影响）：
+```bash
+./docker_run.sh
+```
+
+> 说明：
+> - `项目根目录 → /app`：挂载后端代码与资源（`backend/`、`core/`、`llm_api/`、`prompts/`、`custom/`、`config.py`、`start.sh` 等）。
+> - `frontend/ → /usr/share/nginx/html`：挂载前端静态资源（`index.html`、`js/`、`styles/`、`data/`）。
+> - 修改**前端 JS/CSS/HTML、prompts、custom、assets** 后**无需重启**，保存即生效。
+> - 修改**后端 Python 代码**后执行 `docker restart <容器名>` 生效；若希望自动重载，可在 `.env` 或启动参数中设置 `RELOAD=true`。
+> - 若新增或变更 Python 依赖（`backend/requirements.txt`），仍需重新 `docker build`。
+
+### 在 macOS（Apple Silicon）上构建与运行
+
+如果你在 **M 系列芯片的 Mac** 上本地运行，建议直接构建 **arm64** 镜像，避免 amd64 镜像被 Rosetta 模拟（会有平台警告，且性能较差）。
+
+**在 Mac 上构建 arm64 镜像**（项目根目录执行）
+```bash
+docker build --platform linux/arm64 -t long-novel-gpt:latest .
+```
+
+**在项目根目录运行（注意端口映射）**
+```bash
+docker run -p 8989:80 \
+    --env-file .env \
+    -v "$(pwd)":/app \
+    -v "$(pwd)/frontend":/usr/share/nginx/html \
+    --add-host=host.docker.internal:host-gateway \
+    -d long-novel-gpt:latest
+```
+
+> 说明：
+> - 容器内 nginx 监听的是 `FRONTEND_PORT`（`.env` 中默认 80），因此要把**宿主端口映射到容器 80**，例如 `-p 8989:80`，之后访问 `http://localhost:8989`。
+> - 如果**既要在 Ubuntu 上构建、又在 Mac 上运行**，推荐用 `docker_build.sh` 里的 `buildx` 多平台构建（`linux/amd64,linux/arm64`）并推送到镜像仓库，Mac 端会自动拉取匹配的 arm64 镜像。
+
 ### 使用本地的大模型服务
 要使用本地的大模型服务，只需要在Docker部署时额外注意以下两点。
 
