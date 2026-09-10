@@ -491,8 +491,25 @@ class Writer:
                 yield next(gen)
         except StopIteration as e:
             output = e.value
-        
-        x2y = output['plot2text']
+        except Exception as e:
+            # 映射模型返回空/无法解析时，回退到默认顺序映射，避免整个流程中断
+            print(f"[map_text] 映射失败，回退到默认顺序映射：{e}")
+            output = None
+
+        x2y = None
+        if output is not None and isinstance(output, dict) and output.get('plot2text'):
+            x2y = output['plot2text']
+
+        if not x2y:
+            # 默认顺序映射：剧情块与正文块按次序一一对应
+            x2y = []
+            if not y_pairs:
+                for i in range(len(x_pairs)):
+                    x2y.append(([i], []))
+            else:
+                for i in range(len(x_pairs)):
+                    x2y.append(([i], [min(i, len(y_pairs) - 1)]))
+
         new_xy_pairs = []
         for xi_list, yi_list in x2y:
             xl, xr = xi_list[0], xi_list[-1]

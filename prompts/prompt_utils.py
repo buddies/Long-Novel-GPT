@@ -19,28 +19,51 @@ def can_parse_json(response):
     except:
         return False
 
+def extract_json_block(text):
+    """从一个可能带有额外文本或Markdown代码块的字符串中，提取第一个合法的JSON对象或数组。"""
+    decoder = json.JSONDecoder()
+    idx = 0
+    n = len(text)
+    while idx < n:
+        if text[idx] in '{[':
+            try:
+                _, end = decoder.raw_decode(text, idx)
+                return text[idx:end]
+            except json.JSONDecodeError:
+                idx += 1
+        else:
+            idx += 1
+    return None
+
 def match_first_json_block(response):
     if can_parse_json(response):
         return response
     
-    pattern = r"(?<=[\r\n])```json(.*?)```(?=[\r\n])"
-    matches = re.findall(pattern, '\n' + response + '\n', re.DOTALL)
-    if not matches:
-        pattern = r"(?<=[\r\n])```(.*?)```(?=[\r\n])"
-        matches = re.findall(pattern, '\n' + response + '\n', re.DOTALL)
-        
-    if matches:
-        json_block = matches[0]
-        if can_parse_json(json_block):
-            return json_block
-        else:
-            json_block = json_block.replace('\r\n', '')  # 在continue generate情况下，不同部分之间可能有多出的换行符，导致合起来之后json解析失败
+    # 兼容不同模型的输出格式：语言标签大小写/前后空格、代码块边界前后无换行等
+    found_code_block = False
+    patterns = [
+        r"```\s*json\s*(.*?)```",
+        r"```(.*?)```",
+    ]
+    for pattern in patterns:
+        for m in re.finditer(pattern, '\n' + response + '\n', re.DOTALL | re.IGNORECASE):
+            found_code_block = True
+            json_block = m.group(1)
+            # 在continue generate情况下，不同部分之间可能有多出的换行符，导致合起来之后json解析失败
+            json_block = json_block.replace('\r\n', '')
             if can_parse_json(json_block):
                 return json_block
-            else:
-                raise Exception(f"无法解析JSON代码块")
+
+    # 若没有代码块，尝试从整段响应中提取第一个合法的JSON对象/数组
+    json_block = extract_json_block(response)
+    if json_block is not None and can_parse_json(json_block):
+        return json_block
+
+    snippet = (response or '')[:120].replace('\n', ' ').replace('\r', '')
+    if found_code_block:
+        raise Exception(f"无法解析JSON代码块，响应片段：{snippet}")
     else:
-        raise Exception(f"没有匹配到JSON代码块")
+        raise Exception(f"没有匹配到JSON代码块，响应片段：{snippet}")
     
 def parse_first_json_block(response_msgs: ChatMessages):
     assert response_msgs[-1]['role'] == 'assistant'
